@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>محرر الملفات</title>
+  <meta name="description" content="محرر ملفات عربي مستوحى من VS Code — ارفع أي ملف وعدّل محتواه وحمّله بنفس الامتداد" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Title Bar -->
+  <div id="titlebar">
+    <div id="menu-bar">
+      <button>ملف</button>
+      <button>تعديل</button>
+      <button>عرض</button>
+    </div>
+    <span class="title">محرر الملفات</span>
+  </div>
+
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <button id="sidebar-toggle" onclick="toggleSidebar()" title="الشريط الجانبي" aria-label="تبديل الشريط الجانبي">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <rect x="1" y="3" width="14" height="1.5" rx="0.5"/>
+        <rect x="1" y="7.25" width="14" height="1.5" rx="0.5"/>
+        <rect x="1" y="11.5" width="14" height="1.5" rx="0.5"/>
+      </svg>
+    </button>
+
+    <button id="upload-btn" onclick="document.getElementById('file-input').click()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <span>فتح ملف</span>
+    </button>
+
+    <div id="toolbar-sep"></div>
+
+    <select id="encoding-select" title="الترميز">
+      <option>UTF-8</option>
+      <option>UTF-16</option>
+      <option>ISO-8859-1</option>
+    </select>
+
+    <button id="done-btn" onclick="downloadFile()" disabled>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+      <span>Done</span>
+    </button>
+
+    <input type="file" id="file-input" />
+  </div>
+
+  <!-- Body -->
+  <div id="body">
+
+    <!-- Sidebar overlay (mobile) -->
+    <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+    <!-- Sidebar / Explorer -->
+    <div id="sidebar">
+      <div id="sidebar-header">المستكشف</div>
+      <div id="file-tree">
+        <div id="sidebar-empty">
+          لا توجد ملفات مفتوحة<br />
+          <small>ارفع ملفاً للبدء</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Editor Pane -->
+    <div id="editor-pane">
+
+      <!-- Tabs -->
+      <div id="tabs-bar"></div>
+
+      <!-- Drop Zone -->
+      <div id="drop-zone"
+        onclick="document.getElementById('file-input').click()"
+        ondragover="onDragOver(event)"
+        ondragleave="onDragLeave(event)"
+        ondrop="onDrop(event)">
+        <div class="drop-icon">
+          <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#cccccc" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="12" y1="18" x2="12" y2="12"/>
+            <line x1="9" y1="15" x2="15" y2="15"/>
+          </svg>
+        </div>
+        <h2>افتح ملفاً للتعديل</h2>
+        <p>
+          اسحب وأفلت الملف هنا أو انقر للاختيار<br />
+          <span class="kbd">Ctrl</span> + <span class="kbd">O</span> للفتح السريع
+        </p>
+      </div>
+
+      <!-- Editor -->
+      <div id="editor-wrapper">
+        <div id="line-numbers"></div>
+        <textarea
+          id="code-editor"
+          spellcheck="false"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          aria-label="محرر الكود"
+          oninput="onEditorInput()"
+          onscroll="syncScroll()"
+          onkeydown="handleKey(event)"
+        ></textarea>
+      </div>
+
+    </div><!-- /editor-pane -->
+  </div><!-- /body -->
+
+  <!-- Status Bar -->
+  <div id="statusbar">
+    <div class="status-section left">
+      <span class="status-item" id="status-branch">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+        main
+      </span>
+    </div>
+    <div class="status-section right">
+      <span class="status-item" id="status-pos">سطر 1، عمود 1</span>
+      <span class="status-item" id="status-lines">0 سطر</span>
+      <span class="status-item" id="status-lang">نص</span>
+      <span class="status-item" id="status-size">0 بايت</span>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<div id="toast"></div>
+
+<script>
+/* ======================================================
+   STATE
+====================================================== */
+const state = {
+  files: [],       // { name, ext, content, originalContent }
+  activeIdx: -1,
+};
+
+/* ======================================================
+   ELEMENTS
+====================================================== */
+const $ = id => document.getElementById(id);
+const fileInput    = $('file-input');
+const dropZone     = $('drop-zone');
+const editorWrap   = $('editor-wrapper');
+const codeEditor   = $('code-editor');
+const lineNumbers  = $('line-numbers');
+const tabsBar      = $('tabs-bar');
+const fileTree     = $('file-tree');
+const sidebarEmpty = $('sidebar-empty');
+const doneBtn      = $('done-btn');
+const statusPos    = $('status-pos');
+const statusLines  = $('status-lines');
+const statusLang   = $('status-lang');
+const statusSize   = $('status-size');
+const sidebar      = $('sidebar');
+const overlay      = $('sidebar-overlay');
+
+/* ======================================================
+   FILE TYPE MAP
+====================================================== */
+const LANG_MAP = {
+  js:'JavaScript', ts:'TypeScript', jsx:'React JSX', tsx:'React TSX',
+  html:'HTML', htm:'HTML', css:'CSS', scss:'SCSS', sass:'SASS',
+  json:'JSON', xml:'XML', svg:'SVG', md:'Markdown', markdown:'Markdown',
+  py:'Python', rb:'Ruby', php:'PHP', java:'Java', cs:'C#', cpp:'C++',
+  c:'C', go:'Go', rs:'Rust', sh:'Shell', bat:'Batch', ps1:'PowerShell',
+  yaml:'YAML', yml:'YAML', toml:'TOML', ini:'INI', cfg:'Config',
+  sql:'SQL', txt:'نص', log:'Log', tex:'LaTeX', vue:'Vue', astro:'Astro',
+};
+
+const ICON_MAP = {
+  js:'🟨', ts:'🔷', jsx:'⚛️', tsx:'⚛️', html:'🟧', css:'🔵',
+  json:'📋', md:'📝', py:'🐍', svg:'🖼️', sh:'⚡', yml:'⚙️',
+  yaml:'⚙️', sql:'🗄️', txt:'📄', log:'📜', vue:'💚',
+};
+
+function getLang(ext) { return LANG_MAP[ext.toLowerCase()] || ext.toUpperCase(); }
+function getIcon(ext) { return ICON_MAP[ext.toLowerCase()] || '📄'; }
+
+/* ======================================================
+   MIME
+====================================================== */
+function getMime(ext) {
+  const m = { html:'text/html', htm:'text/html', css:'text/css',
+    js:'text/javascript', ts:'text/typescript', json:'application/json',
+    xml:'application/xml', svg:'image/svg+xml', md:'text/markdown',
+    csv:'text/csv', py:'text/x-python', sh:'text/x-sh', txt:'text/plain',
+    yaml:'text/yaml', yml:'text/yaml', sql:'application/sql' };
+  return m[ext.toLowerCase()] || 'text/plain';
+}
+
+/* ======================================================
+   LOAD FILE
+====================================================== */
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const content = e.target.result;
+    const name = file.name;
+    const ext  = name.includes('.') ? name.split('.').pop() : 'txt';
+
+    // Check if already open
+    const existing = state.files.findIndex(f => f.name === name);
+    if (existing !== -1) {
+      state.activeIdx = existing;
+      state.files[existing].content = content;
+      renderAll();
+      return;
+    }
+
+    state.files.push({ name, ext, content, originalContent: content });
+    state.activeIdx = state.files.length - 1;
+    renderAll();
+    showToast('تم فتح: ' + name);
+    closeSidebar();
+  };
+  reader.onerror = () => showToast('❌ تعذّر قراءة الملف');
+  reader.readAsText(file, 'UTF-8');
+}
+
+/* ======================================================
+   RENDER ALL
+====================================================== */
+function renderAll() {
+  renderTabs();
+  renderSidebar();
+  renderEditor();
+  renderStatusBar();
+}
+
+/* ======================================================
+   TABS
+====================================================== */
+function renderTabs() {
+  tabsBar.innerHTML = '';
+  state.files.forEach((f, i) => {
+    const modified = f.content !== f.originalContent;
+    const tab = document.createElement('div');
+    tab.className = 'tab' + (i === state.activeIdx ? ' active' : '') + (modified ? ' modified' : '');
+    tab.title = f.name;
+    tab.innerHTML = `
+      <span class="tab-name">${f.name}</span>
+      <span class="tab-close" title="إغلاق" data-idx="${i}">×</span>
+    `;
+    tab.addEventListener('click', e => {
+      if (e.target.classList.contains('tab-close')) return;
+      state.activeIdx = i;
+      renderAll();
+    });
+    tab.querySelector('.tab-close').addEventListener('click', e => {
+      e.stopPropagation();
+      closeFile(i);
+    });
+    tabsBar.appendChild(tab);
+  });
+}
+
+function closeFile(idx) {
+  const f = state.files[idx];
+  if (f.content !== f.originalContent) {
+    if (!confirm(`"${f.name}" لم يُحفظ. هل تريد الإغلاق؟`)) return;
+  }
+  state.files.splice(idx, 1);
+  if (state.activeIdx >= state.files.length) {
+    state.activeIdx = state.files.length - 1;
+  }
+  renderAll();
+}
+
+/* ======================================================
+   SIDEBAR
+====================================================== */
+function renderSidebar() {
+  if (state.files.length === 0) {
+    fileTree.innerHTML = '';
+    fileTree.appendChild(sidebarEmpty);
+    sidebarEmpty.style.display = 'block';
+    return;
+  }
+  sidebarEmpty.style.display = 'none';
+  fileTree.innerHTML = '';
+  state.files.forEach((f, i) => {
+    const item = document.createElement('div');
+    item.className = 'tree-item' + (i === state.activeIdx ? ' active' : '');
+    item.innerHTML = `<span class="item-icon">${getIcon(f.ext)}</span><span class="item-name">${f.name}</span>`;
+    item.addEventListener('click', () => {
+      state.activeIdx = i;
+      renderAll();
+      closeSidebar();
+    });
+    fileTree.appendChild(item);
+  });
+}
+
+/* ======================================================
+   EDITOR
+====================================================== */
+function renderEditor() {
+  if (state.activeIdx < 0 || state.files.length === 0) {
+    editorWrap.classList.remove('visible');
+    dropZone.style.display = 'flex';
+    doneBtn.disabled = true;
+    return;
+  }
+  const f = state.files[state.activeIdx];
+  editorWrap.classList.add('visible');
+  dropZone.style.display = 'none';
+  doneBtn.disabled = false;
+
+  if (codeEditor.value !== f.content) {
+    codeEditor.value = f.content;
+  }
+  updateLineNumbers();
+}
+
+function onEditorInput() {
+  if (state.activeIdx < 0) return;
+  state.files[state.activeIdx].content = codeEditor.value;
+  updateLineNumbers();
+  updateCursorStatus();
+  renderTabs();
+  renderSidebar();
+  updateSize();
+}
+
+function updateLineNumbers() {
+  const lines = codeEditor.value.split('\n');
+  lineNumbers.innerHTML = lines.map((_, i) => `<span class="ln" id="ln${i+1}">${i + 1}</span>`).join('');
+  statusLines.textContent = lines.length.toLocaleString('ar') + ' سطر';
+}
+
+function syncScroll() {
+  lineNumbers.scrollTop = codeEditor.scrollTop;
+}
+
+function updateCursorStatus() {
+  const val = codeEditor.value;
+  const pos  = codeEditor.selectionStart;
+  const before = val.substring(0, pos);
+  const lines  = before.split('\n');
+  const line   = lines.length;
+  const col    = lines[lines.length - 1].length + 1;
+  statusPos.textContent = `سطر ${line}، عمود ${col}`;
+
+  // Highlight active line number
+  document.querySelectorAll('.ln').forEach(el => el.classList.remove('active'));
+  const activeLn = document.getElementById('ln' + line);
+  if (activeLn) activeLn.classList.add('active');
+}
+
+function updateSize() {
+  if (state.activeIdx < 0) return;
+  const bytes = new TextEncoder().encode(state.files[state.activeIdx].content).length;
+  statusSize.textContent = bytes < 1024
+    ? bytes + ' بايت'
+    : (bytes / 1024).toFixed(1) + ' كيلوبايت';
+}
+
+/* ======================================================
+   STATUS BAR
+====================================================== */
+function renderStatusBar() {
+  if (state.activeIdx < 0) {
+    statusLang.textContent = 'نص';
+    statusPos.textContent  = 'سطر 1، عمود 1';
+    statusLines.textContent = '0 سطر';
+    statusSize.textContent  = '0 بايت';
+    return;
+  }
+  const f = state.files[state.activeIdx];
+  statusLang.textContent = getLang(f.ext);
+  updateLineNumbers();
+  updateSize();
+  updateCursorStatus();
+}
+
+/* ======================================================
+   DOWNLOAD
+====================================================== */
+function downloadFile() {
+  if (state.activeIdx < 0) return;
+  const f = state.files[state.activeIdx];
+  const blob = new Blob([f.content], { type: getMime(f.ext) + ';charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = f.name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+  // Mark as saved
+  f.originalContent = f.content;
+  renderTabs();
+  showToast('✓ تم حفظ: ' + f.name);
+}
+
+/* ======================================================
+   DRAG & DROP
+====================================================== */
+function onDragOver(e) {
+  e.preventDefault();
+  dropZone.classList.add('drag-over');
+}
+function onDragLeave(e) { dropZone.classList.remove('drag-over'); }
+function onDrop(e) {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+}
+
+// Global drag onto editor
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+
+/* ======================================================
+   FILE INPUT
+====================================================== */
+fileInput.addEventListener('change', e => {
+  Array.from(e.target.files).forEach(loadFile);
+  fileInput.value = '';
+});
+
+/* ======================================================
+   KEYBOARD SHORTCUTS
+====================================================== */
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+    e.preventDefault();
+    fileInput.click();
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    downloadFile();
+  }
+});
+
+function handleKey(e) {
+  // Tab inserts spaces
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const start = codeEditor.selectionStart;
+    const end   = codeEditor.selectionEnd;
+    const spaces = '  ';
+    codeEditor.value = codeEditor.value.substring(0, start) + spaces + codeEditor.value.substring(end);
+    codeEditor.selectionStart = codeEditor.selectionEnd = start + spaces.length;
+    onEditorInput();
+  }
+}
+
+codeEditor.addEventListener('click', updateCursorStatus);
+codeEditor.addEventListener('keyup', updateCursorStatus);
+
+/* ======================================================
+   MOBILE SIDEBAR
+====================================================== */
+function toggleSidebar() {
+  sidebar.classList.toggle('hidden');
+  overlay.classList.toggle('visible');
+}
+function closeSidebar() {
+  sidebar.classList.add('hidden');
+  overlay.classList.remove('visible');
+}
+
+// Start hidden on mobile
+function initSidebar() {
+  if (window.innerWidth <= 700) sidebar.classList.add('hidden');
+}
+initSidebar();
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 700) {
+    sidebar.classList.remove('hidden');
+    overlay.classList.remove('visible');
+  } else {
+    sidebar.classList.add('hidden');
+  }
+});
+
+/* ======================================================
+   TOAST
+====================================================== */
+let toastTimer;
+function showToast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
