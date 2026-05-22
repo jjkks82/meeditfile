@@ -1,0 +1,29 @@
+name: Build TikTokSpoof
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Theos and iOS SDK
+        run: |
+          git clone --recursive https://github.com/theos/theos.git $GITHUB_WORKSPACE/theos
+          git clone https://github.com/theos/sdks.git $GITHUB_WORKSPACE/theos/sdks
+
+      - name: Build Tweak
+        run: |
+          export THEOS=$GITHUB_WORKSPACE/theos
+          make package FINALPACKAGE=1
+
+      - name: Upload Tweak File
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tweak-File
+          path: packages/*.deb
